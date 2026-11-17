@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Himnario digital · Celebremos su Gloria</title>
 <!-- INICIO-PWA -->
-<!-- PWA generado por _build_pwa.js: manifest data: URI, iconos base64, sin service worker -->
+<!-- PWA generado por _build_pwa.js: manifest data: URI, iconos base64 y service worker (app_Himnario_sw.js) para abrir sin conexión -->
 <meta name="description" content="Himnario digital «Celebremos su Gloria»: 652 cantos con indicaciones, favoritos y búsqueda. Un solo archivo, funciona sin conexión.">
 <meta name="theme-color" id="metaTema" content="#8a5a2b">
 <meta name="application-name" content="Himnario">
@@ -48,7 +48,16 @@
   #btnInstalar[hidden]{display:none!important}
   #btnInstalar{background:var(--acento-suave);border:1px solid var(--linea)}
   #btnInstalar:hover{border-color:var(--acento)}
-  @media print{#btnInstalar{display:none!important}}
+  /* aviso persistente: el service worker no está publicado y sin él no hay caché */
+  #pwaAviso{display:none;position:fixed;left:10px;right:10px;bottom:10px;z-index:95;
+    align-items:flex-start;gap:8px;padding:10px 12px;border-radius:10px;
+    border:1px solid #c2453f;background:#fdecec;color:#7d1f1b;font-size:.82rem;line-height:1.35;
+    box-shadow:var(--sombra)}
+  #pwaAviso.on{display:flex}
+  #pwaAviso span{flex:1 1 auto}
+  #pwaAviso button{margin-left:auto;flex:0 0 auto;padding:2px 6px;font-size:.9rem;line-height:1}
+  [data-theme="oscuro"] #pwaAviso{background:#3a1c1b;color:#ffb3ad;border-color:#8e211d}
+  @media print{#pwaAviso{display:none!important}}
 </style>
 <!-- FIN-PWA -->
 
@@ -1882,7 +1891,7 @@ Estribillo…</pre>
     if (pwaBtn) pwaBtn.hidden = true;
     toast(navigator.serviceWorker && navigator.serviceWorker.controller
       ? "Himnario instalado. Ya abre sin conexión desde tu pantalla de inicio."
-      : "Himnario instalado. Ya puedes abrirlo desde tu pantalla de inicio.");
+      : "Himnario instalado. Ábrelo una vez con internet para guardar la copia sin conexión.");
   });
   if (pwaBtn) pwaBtn.addEventListener("click", function () {
     if (pwaEvento && typeof pwaEvento.prompt === "function") {
@@ -1895,16 +1904,71 @@ Estribillo…</pre>
       toast("Para instalarlo: Chrome → menú ⋮ → «Instalar aplicación»; iPhone/iPad → Compartir → «Añadir a pantalla de inicio».");
     }
   });
-  /* ── sin conexión: app_Himnario_sw.js guarda este HTML en la caché del navegador ── */
-  var pwaSw = null, pwaSwError = false;
-  if (/^https?:$/.test(location.protocol) && "serviceWorker" in navigator) {
-    window.addEventListener("load", function () {
-      navigator.serviceWorker.register("./app_Himnario_sw.js").then(function (r) {
-        pwaSw = r;
-      }).catch(function () {
-        /* si falta app_Himnario_sw.js la app sigue funcionando igual, sin caché */
-        pwaSwError = true;
+  /* ── sin conexión: app_Himnario_sw.js guarda este HTML en la caché del navegador.
+     El service worker no puede vivir dentro de la página (su script tiene que ser
+     un archivo aparte del mismo origen) y en file:// no existe, así que si el .js
+     no está publicado la app funciona igual, pero SIN caché offline. ── */
+  var pwaSw = null, pwaSwError = null, pwaCopiaLista = false;
+  function pwaEstado(texto) {
+    if (pwaBtn) pwaBtn.title = texto;   /* queda en el tooltip del botón */
+  }
+  /* aviso visible y persistente: no lo pisa el toast del arranque */
+  var pwaAvisoEl = null;
+  function pwaAviso(texto) {
+    if (!pwaAvisoEl) {
+      if (sessionStorage.getItem("himnario_pwa_aviso") === "cerrado") return;
+      pwaAvisoEl = document.createElement("div");
+      pwaAvisoEl.id = "pwaAviso";
+      pwaAvisoEl.setAttribute("role", "status");
+      pwaAvisoEl.innerHTML = "<span></span><button type=\"button\" aria-label=\"Cerrar aviso\">✕</button>";
+      pwaAvisoEl.querySelector("button").addEventListener("click", function () {
+        pwaAvisoEl.classList.remove("on");
+        try { sessionStorage.setItem("himnario_pwa_aviso", "cerrado"); } catch (e) {}
       });
+      document.body.appendChild(pwaAvisoEl);
+    }
+    pwaAvisoEl.children[0].textContent = texto;
+    pwaAvisoEl.classList.add("on");
+  }
+  function pwaComprobarCopia() {
+    return navigator.serviceWorker.ready.then(function (reg) {
+      pwaSw = reg;
+      return caches.keys().then(function (ks) {
+        var propias = ks.filter(function (k) { return k.indexOf("himnario") === 0; });
+        return Promise.all(propias.map(function (k) { return caches.open(k); }));
+      });
+    }).then(function (cs) {
+      return Promise.all(cs.map(function (c) {
+        return c.match("./app_Himnario.html", { ignoreSearch: true });
+      }));
+    }).then(function (res) {
+      pwaCopiaLista = res.some(function (r) { return !!r; });
+      if (pwaCopiaLista) {
+        pwaEstado("Ya abre sin conexión: la copia está guardada.");
+        if (!localStorage.getItem("himnario_offline_listo")) {
+          localStorage.setItem("himnario_offline_listo", "1");
+          toast("Listo: el himnario ya abre sin conexión.");
+        }
+      } else {
+        pwaEstado("Falta guardar la copia sin conexión: abre la app con internet.");
+        pwaAviso("Sin conexión todavía no disponible: abre la app una vez con internet para guardar la copia.");
+      }
+      return pwaCopiaLista;
+    }).catch(function () { return false; });
+  }
+  if (/^https?:$/.test(location.protocol) && "serviceWorker" in navigator) {
+    /* updateViaCache:"none" evita que la caché HTTP de GitHub Pages (10 min)
+       entregue un service worker viejo */
+    navigator.serviceWorker.register("./app_Himnario_sw.js", { updateViaCache: "none" })
+      .then(pwaComprobarCopia)
+      .catch(function (err) {
+        pwaSwError = String((err && err.message) || err || "error");
+        /* síntoma típico: el .js no se publicó junto al HTML (404) */
+        pwaEstado("Sin conexión no disponible: falta publicar app_Himnario_sw.js junto al HTML.");
+        pwaAviso("Sin conexión no disponible: falta publicar app_Himnario_sw.js en la misma carpeta que este HTML.");
+      });
+    navigator.serviceWorker.addEventListener("controllerchange", function () {
+      pwaComprobarCopia();
     });
   }
   /* con service worker algunos navegadores no emiten beforeinstallprompt: a los 2,5 s
@@ -1960,11 +2024,12 @@ Estribillo…</pre>
       instalada: pwaInstalada,
       manifiesto: function () { return document.getElementById("manifiesto").href; },
       pulsa: function () { if (pwaBtn) pwaBtn.click(); },
-      /* {controlado: la página ya la sirve el SW, registrado, error} */
+      /* {controlado, registrado, copia, error}: si copia es false, sin conexión no abrirá */
       offline: function () {
         return { controlado: !!(navigator.serviceWorker && navigator.serviceWorker.controller),
-                 registrado: !!pwaSw, error: pwaSwError };
+                 registrado: !!pwaSw, copia: pwaCopiaLista, error: pwaSwError };
       },
+      revisar: pwaComprobarCopia,
       /* URLs guardadas para abrir sin conexión */
       cache: function () {
         return caches.keys()

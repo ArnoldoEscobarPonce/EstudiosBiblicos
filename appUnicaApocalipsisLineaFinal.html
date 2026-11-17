@@ -3902,5 +3902,46 @@
     Object.keys(RVR).length + " libros con texto RVR1960 embebido.");
 })();
 </script>
+<!-- INICIO-BOTON-INDICE — botón flotante para volver al índice de la Biblia.
+     Lo escribe _add_boton_indice.js; se puede borrar a mano sin romper la app. -->
+<style>
+  #btnIndiceBiblia {
+    position: fixed;
+    left: 14px;
+    bottom: 14px;
+    z-index: 140;
+    display: inline-flex;
+    align-items: center;
+    gap: 7px;
+    min-height: 44px;
+    padding: 0 15px 0 12px;
+    border: 1px solid var(--line-soft, #3a4354);
+    border-radius: 999px;
+    background: var(--bg-card, #181c26);
+    color: var(--text, #e7eaf0);
+    font: 600 13.5px/1 var(--font, "Segoe UI", Roboto, Arial, sans-serif);
+    text-decoration: none;
+    box-shadow: var(--shadow, 0 8px 24px rgba(0, 0, 0, 0.55));
+    transition: transform .12s ease, background .15s ease, border-color .15s ease, color .15s ease;
+    -webkit-tap-highlight-color: transparent;
+  }
+  #btnIndiceBiblia:hover,
+  #btnIndiceBiblia:focus-visible {
+    background: var(--bg-panel, #12161f);
+    border-color: var(--accent, #d9a441);
+    color: var(--accent, #d9a441);
+  }
+  #btnIndiceBiblia:focus-visible { outline: 2px solid var(--accent, #d9a441); outline-offset: 2px; }
+  #btnIndiceBiblia:active { transform: scale(.96); }
+  #btnIndiceBiblia .flecha { font-size: 16px; line-height: 1; }
+  @media (max-width: 420px) {
+    #btnIndiceBiblia { min-height: 46px; padding: 0 14px 0 11px; font-size: 13px; }
+  }
+  @media print { #btnIndiceBiblia { display: none !important; } }
+</style>
+<a id="btnIndiceBiblia" href="appIndiceBiblia.html" title="Volver al índice de la Biblia" aria-label="Volver al índice de la Biblia">
+  <span class="flecha" aria-hidden="true">←</span><span>Índice</span>
+</a>
+<!-- FIN-BOTON-INDICE -->
 </body>
 </html>
